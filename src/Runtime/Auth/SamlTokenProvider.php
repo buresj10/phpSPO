@@ -143,25 +143,35 @@ class SamlTokenProvider extends BaseTokenProvider
     protected function acquireSecurityTokenFromFederatedSTS($username, $password) {
 
         $response = Requests::get(str_replace('{username}', $username, self::$RealmUrlTemplate),null);
-        $federatedStsUrl = $this->getFederatedAuthenticationInformation($response->getContent());
+        if (!($urlNode = $this->getFederatedAuthenticationInformation($response->getContent()))) {
+            return null;
+        }
 
-        if ($federatedStsUrl) {
-          $message_id = md5(uniqid($username . '-' . time() . '-' . rand() , true));
-          $data = $this->prepareSecurityFederatedTokenRequest($username, $password, $message_id, $federatedStsUrl->textContent);
+        $urlParts = parse_url($urlNode->textContent);
+        if (!$urlParts || !isset($urlParts['host'])) {
+            return null;
+        }
 
-          $headers = array();
-          $headers['Content-Type'] = 'application/soap+xml';
-          $response = Requests::post($federatedStsUrl->textContent, $headers, $data);
+        if (!isset($urlParts['scheme'])) {
+            $urlParts['scheme'] = 'https';
+        }
 
-          $samlAssertion = $this->getSamlAssertion($response->getContent());
+        $federatedStsUrl = "{$urlParts['scheme']}://{$urlParts['host']}/adfs/services/trust/2005/usernamemixed/";
+        $message_id = md5(uniqid($username . '-' . time() . '-' . rand() , true));
+        $data = $this->prepareSecurityFederatedTokenRequest($username, $password, $message_id, $federatedStsUrl);
 
-          if ($samlAssertion) {
-            $samlAssertion_node = $samlAssertion->item(0);
-            $data = $this->prepareRST2Request($samlAssertion_node);
-            $response = Requests::post(self::$RST2Url, $headers, $data);
-            $this->useFederatedSTS = TRUE;
-            return $response;
-          }
+        $headers = array();
+        $headers['Content-Type'] = 'application/soap+xml';
+        $response = Requests::post($federatedStsUrl, $headers, $data);
+
+        $samlAssertion = $this->getSamlAssertion($response->getContent());
+
+        if ($samlAssertion) {
+          $samlAssertion_node = $samlAssertion->item(0);
+          $data = $this->prepareRST2Request($samlAssertion_node);
+          $response = Requests::post(self::$RST2Url, $headers, $data);
+          $this->useFederatedSTS = TRUE;
+          return $response;
         }
         return null;
     }

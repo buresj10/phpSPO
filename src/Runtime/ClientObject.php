@@ -264,13 +264,14 @@ class ClientObject
      */
     public function getProperty($name,$defaultValue=null)
     {
-        $calledFnName = debug_backtrace()[1]['function'];
+        $trace = debug_backtrace();
+        $calledFnName = count($trace) > 1 ? $trace[1]['function'] : null;
 
         if($this->isPropertyAvailable($name))
             return $this->properties[$name];
         else if(is_null($defaultValue)) {
             $getter = "get$name";
-            if(method_exists($this,$getter) && strcasecmp($getter, $calledFnName) != 0) {
+            if(method_exists($this,$getter) && $calledFnName && strcasecmp($getter, $calledFnName) != 0) {
                 $defaultValue = $this->$getter();
             }
         }
